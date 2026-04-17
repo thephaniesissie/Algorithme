@@ -1,0 +1,154 @@
+<div class="app">
+  <h1>Algorithme Hongrois - Problème d'Affectation</h1>
+
+  <!-- Message d'erreur -->
+  <div *ngIf="errorMessage" class="error-banner">
+    <span>⚠️</span> {{ errorMessage }}
+  </div>
+
+  <!-- Configuration -->
+  <section class="card">
+    <h2>⚙️ Configuration</h2>
+    <div class="config-bar">
+      <div class="config-item">
+        <label>Taille de la matrice (n x n) :</label>
+        <input type="number" min="2" max="10" [(ngModel)]="size" (change)="resizeMatrix()" class="size-input">
+        <span class="hint">(entre 2 et 10)</span>
+      </div>
+      <div class="config-item">
+        <label>Type d'optimisation :</label>
+        <select [(ngModel)]="isMinimization" class="type-select">
+          <option [value]="true">Minimisation (coûts)</option>
+          <option [value]="false">Maximisation (profits)</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <!-- SAISIE MATRICE -->
+  <section class="card">
+    <h2>Saisir la matrice des {{ isMinimization ? 'coûts' : 'profits' }}</h2>
+    <p class="hint">Entrez des nombres dans chaque case</p>
+    
+    <div class="matrix-container">
+      <div class="matrix-grid" [style.grid-template-columns]="'80px repeat(' + size + ', 90px)'">
+        <div class="cell header empty"></div>
+        <div *ngFor="let job of labels; let j = index; trackBy: trackByCol" class="cell header job"> {{ job }}</div>
+        
+        <ng-container *ngFor="let row of matrixData; let i = index; trackBy: trackByRow">
+          <div class="cell header worker"> {{ labels[i] }}</div>
+          <div *ngFor="let val of row; let j = index; trackBy: trackByCol" class="cell input">
+            <input type="number" [(ngModel)]="matrixData[i][j]" (change)="onCellChange(i, j, $event)" placeholder="0">
+          </div>
+        </ng-container>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn primary" (click)="runAlgorithm()" [disabled]="isRunning">
+        {{ isRunning ? '⏳ Calcul...' : '🚀 Lancer l\'algorithme' }}
+      </button>
+      <button class="btn" (click)="loadExample()">📄 Charger l'exemple du PDF</button>
+      <button class="btn" (click)="reset()">🔄 Réinitialiser</button>
+      <button class="btn" (click)="fillRandom()"> Remplir aléatoirement</button>
+    </div>
+  </section>
+
+  <!-- NAVIGATION ÉTAPES -->
+  <section *ngIf="steps.length > 0" class="card">
+    <h2> Étapes de l'algorithme hongrois</h2>
+    <div class="step-nav">
+      <button *ngFor="let s of steps; let i = index" 
+              class="step-btn" 
+              [class.active]="currentStep === i" 
+              [class.final]="s.isFinal" 
+              (click)="goToStep(i)">
+        {{ s.stepNum }}
+      </button>
+    </div>
+    <div class="nav-arrows">
+      <button (click)="prevStep()" [disabled]="currentStep <= 0">◀ Précédent</button>
+      <span class="step-counter">Étape {{ currentStep + 1 }} / {{ steps.length }}</span>
+      <button (click)="nextStep()" [disabled]="currentStep >= steps.length - 1">Suivant ▶</button>
+    </div>
+  </section>
+
+  <!-- AFFICHAGE ÉTAPE -->
+  <section *ngIf="currentStep >= 0 && steps[currentStep]" class="card">
+    <h2>
+      {{ steps[currentStep].title }} 
+      <span *ngIf="steps[currentStep].isFinal" class="badge">✓ Solution optimale</span>
+    </h2>
+    <p class="desc">{{ steps[currentStep].description }}</p>
+
+    <div class="matrix-container">
+      <div class="matrix-grid" [style.grid-template-columns]="'80px repeat(' + size + ', 90px)'">
+        <div class="cell header empty"></div>
+        <div *ngFor="let job of labels; let j = index" class="cell header job">{{ job }}</div>
+        
+        <ng-container *ngFor="let row of steps[currentStep].matrix; let i = index">
+          <div class="cell header worker">{{ labels[i] }}</div>
+          <ng-container *ngFor="let val of row; let j = index">
+            <div class="cell value" 
+                 [class.zero]="val === 0" 
+                 [class.framed]="isFramed(i, j, steps[currentStep])" 
+                 [class.crossed]="isCrossed(i, j, steps[currentStep])" 
+                 [class.covered-row]="isRowCovered(i, steps[currentStep])"
+                 [class.covered-col]="isColCovered(j, steps[currentStep])">
+              {{ val }}
+            </div>
+          </ng-container>
+        </ng-container>
+      </div>
+    </div>
+
+    <div class="step-details">
+      <div *ngIf="steps[currentStep].rowMins" class="detail">
+        <strong>Minimal par ligne :</strong> [{{ steps[currentStep].rowMins?.join(', ') }}]
+      </div>
+      <div *ngIf="steps[currentStep].colMins" class="detail">
+        <strong>Minimal par colonne :</strong> [{{ steps[currentStep].colMins?.join(', ') }}]
+      </div>
+      <div *ngIf="steps[currentStep].minUncovered !== undefined" class="detail">
+        <strong>Minimum non-couvert :</strong> {{ steps[currentStep].minUncovered }}
+      </div>
+      <div *ngIf="steps[currentStep].lowerBound !== undefined" class="detail highlight">
+        <strong>Minorant (borne inférieure) :</strong> {{ steps[currentStep].lowerBound }}
+      </div>
+      <div *ngIf="steps[currentStep].coveredRows || steps[currentStep].coveredCols" class="detail">
+        <strong>Support minimal :</strong> 
+        <span *ngIf="getCoveredRows(steps[currentStep]).length > 0">
+          Lignes rayées : {{ getCoveredRows(steps[currentStep]).join(', ') }}
+        </span>
+        <span *ngIf="getCoveredCols(steps[currentStep]).length > 0">
+          Colonnes rayées : {{ getCoveredCols(steps[currentStep]).join(', ') }}
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- RÉSULTAT FINAL -->
+  <section *ngIf="result" class="card result-card">
+    <h2>🏆 Résultat final</h2>
+    <div class="result-content">
+      <div class="result-cost">
+        <strong>Coût {{ isMinimization ? 'minimal' : 'maximal' }} total :</strong> 
+        <span class="cost-value">{{ result.totalCost }}</span>
+      </div>
+      <div class="result-assignments">
+        <h3>Affectations optimales :</h3>
+        <div class="assignment-list">
+          <div *ngFor="let assignment of result.assignments" class="assignment-item">
+            <span class="worker"> {{ assignment.worker }}</span> 
+            <span class="arrow">→</span>
+            <span class="job"> {{ assignment.job }}</span> 
+            <span class="cost">({{ assignment.cost }})</span>
+          </div>
+        </div>
+      </div>
+      <div class="optimal-badge" *ngIf="result.isOptimal">
+        Solution optimale trouvée !
+      </div>
+    </div>
+  </section>
+</div>
