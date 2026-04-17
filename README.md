@@ -1,0 +1,2 @@
+# Algorithme
+Affectation R.O
