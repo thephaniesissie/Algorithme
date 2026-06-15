@@ -1,14 +1,14 @@
 <div class="app">
-  <h1>Algorithme Hongrois - Problème d'Affectation</h1>
+  <h1>Algorithme - Problème d'Affectation</h1>
 
   <!-- Message d'erreur -->
   <div *ngIf="errorMessage" class="error-banner">
-    <span>⚠️</span> {{ errorMessage }}
+    <span>Erreur</span> {{ errorMessage }}
   </div>
 
   <!-- Configuration -->
   <section class="card">
-    <h2>⚙️ Configuration</h2>
+    <h2>Configuration</h2>
     <div class="config-bar">
       <div class="config-item">
         <label>Taille de la matrice (n x n) :</label>
@@ -46,17 +46,17 @@
 
     <div class="actions">
       <button class="btn primary" (click)="runAlgorithm()" [disabled]="isRunning">
-        {{ isRunning ? '⏳ Calcul...' : '🚀 Lancer l\'algorithme' }}
+        {{ isRunning ? 'Calcul...' : 'Lancer l\'algorithme' }}
       </button>
-      <button class="btn" (click)="loadExample()">📄 Charger l'exemple du PDF</button>
-      <button class="btn" (click)="reset()">🔄 Réinitialiser</button>
-      <button class="btn" (click)="fillRandom()"> Remplir aléatoirement</button>
+      <button class="btn" (click)="loadExample()">Charger l'exemple</button>
+      <!-- <button class="btn" (click)="reset()">Réinitialiser</button> -->
+      <button class="btn" (click)="fillRandom()">Remplir aléatoirement</button>
     </div>
   </section>
 
   <!-- NAVIGATION ÉTAPES -->
   <section *ngIf="steps.length > 0" class="card">
-    <h2> Étapes de l'algorithme hongrois</h2>
+    <h2>Étapes de l'algorithme </h2>
     <div class="step-nav">
       <button *ngFor="let s of steps; let i = index" 
               class="step-btn" 
@@ -67,9 +67,9 @@
       </button>
     </div>
     <div class="nav-arrows">
-      <button (click)="prevStep()" [disabled]="currentStep <= 0">◀ Précédent</button>
+      <button (click)="prevStep()" [disabled]="currentStep <= 0">Précédent</button>
       <span class="step-counter">Étape {{ currentStep + 1 }} / {{ steps.length }}</span>
-      <button (click)="nextStep()" [disabled]="currentStep >= steps.length - 1">Suivant ▶</button>
+      <button (click)="nextStep()" [disabled]="currentStep >= steps.length - 1">Suivant</button>
     </div>
   </section>
 
@@ -77,17 +77,23 @@
   <section *ngIf="currentStep >= 0 && steps[currentStep]" class="card">
     <h2>
       {{ steps[currentStep].title }} 
-      <span *ngIf="steps[currentStep].isFinal" class="badge">✓ Solution optimale</span>
+      <span *ngIf="steps[currentStep].isFinal" class="badge">Solution optimale</span>
     </h2>
     <p class="desc">{{ steps[currentStep].description }}</p>
 
     <div class="matrix-container">
       <div class="matrix-grid" [style.grid-template-columns]="'80px repeat(' + size + ', 90px)'">
         <div class="cell header empty"></div>
-        <div *ngFor="let job of labels; let j = index" class="cell header job">{{ job }}</div>
+        <div *ngFor="let job of labels; let j = index" class="cell header job">
+          {{ job }}
+          <span *ngIf="isMarkedCol(j, steps[currentStep])" class="marker-plus">+</span>
+        </div>
         
         <ng-container *ngFor="let row of steps[currentStep].matrix; let i = index">
-          <div class="cell header worker">{{ labels[i] }}</div>
+          <div class="cell header worker">
+            {{ labels[i] }}
+            <span *ngIf="isMarkedRow(i, steps[currentStep])" class="marker-plus">+</span>
+          </div>
           <ng-container *ngFor="let val of row; let j = index">
             <div class="cell value" 
                  [class.zero]="val === 0" 
@@ -115,6 +121,15 @@
       <div *ngIf="steps[currentStep].lowerBound !== undefined" class="detail highlight">
         <strong>Minorant (borne inférieure) :</strong> {{ steps[currentStep].lowerBound }}
       </div>
+      <div *ngIf="hasMarking(steps[currentStep])" class="detail">
+        <strong>Marquage (algorithme a/b/c) :</strong>
+        <span *ngIf="getMarkedRows(steps[currentStep]).length > 0">
+          Lignes marquées (+) : {{ getMarkedRows(steps[currentStep]).join(', ') }}
+        </span>
+        <span *ngIf="getMarkedCols(steps[currentStep]).length > 0">
+          &nbsp;Colonnes marquées (+) : {{ getMarkedCols(steps[currentStep]).join(', ') }}
+        </span>
+      </div>
       <div *ngIf="steps[currentStep].coveredRows || steps[currentStep].coveredCols" class="detail">
         <strong>Support minimal :</strong> 
         <span *ngIf="getCoveredRows(steps[currentStep]).length > 0">
@@ -129,7 +144,7 @@
 
   <!-- RÉSULTAT FINAL -->
   <section *ngIf="result" class="card result-card">
-    <h2>🏆 Résultat final</h2>
+    <h2>Résultat final</h2>
     <div class="result-content">
       <div class="result-cost">
         <strong>Coût {{ isMinimization ? 'minimal' : 'maximal' }} total :</strong> 
@@ -139,9 +154,9 @@
         <h3>Affectations optimales :</h3>
         <div class="assignment-list">
           <div *ngFor="let assignment of result.assignments" class="assignment-item">
-            <span class="worker"> {{ assignment.worker }}</span> 
+            <span class="worker">{{ assignment.worker }}</span> 
             <span class="arrow">→</span>
-            <span class="job"> {{ assignment.job }}</span> 
+            <span class="job">{{ assignment.job }}</span> 
             <span class="cost">({{ assignment.cost }})</span>
           </div>
         </div>
@@ -151,4 +166,27 @@
       </div>
     </div>
   </section>
+
+  <!-- EXPORTS PPTX / PDF -->
+ <section *ngIf="result" class="card">
+
+  <h2>Exporter les résultats</h2>
+
+  <div class="actions">
+
+    <button
+      class="btn primary"
+      (click)="generatePowerPoint()">
+      Télécharger PPTX
+    </button>
+
+    <button
+      class="btn"
+      (click)="generatePDF()">
+      Télécharger PDF
+    </button>
+
+  </div>
+
+</section>
 </div>
