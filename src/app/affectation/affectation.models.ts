@@ -5,6 +5,8 @@ export interface MatrixStep {
   matrix: number[][];
   rowMins?: number[];
   colMins?: number[];
+  rowZeroCounts?: number[];
+  colZeroCounts?: number[];
   marked?: { r: number; c: number; type: 'framed' | 'crossed' }[];
   coveredRows?: boolean[];
   coveredCols?: boolean[];

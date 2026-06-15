@@ -157,188 +157,236 @@ export class AffectationComponent {
   }
 
   executeHungarianAlgorithm() {
-    // Sauvegarder la matrice originale
-    for (let i = 0; i < this.size; i++) {
-      for (let j = 0; j < this.size; j++) {
-        this.originalMatrix[i][j] = this.matrixData[i][j];
-      }
-    }
-    
-    this.reset();
-    
-    let matrix = this.originalMatrix.map(r => [...r]);
-    if (!this.isMinimization) {
-      const maxVal = Math.max(...matrix.flat());
-      matrix = matrix.map(r => r.map(v => maxVal - v));
-    }
-
-    this.workMatrix = matrix.map(r => [...r]);
-    this.steps = [];
-    this.lowerBound = 0;
-    let stepNum = 1;
-
-    // --- Étape 1a : Réduction par lignes ---
-    const rowMins: number[] = [];
-    for (let i = 0; i < this.size; i++) {
-      const min = Math.min(...this.workMatrix[i]);
-      rowMins.push(min);
-      this.lowerBound += min;
-      for (let j = 0; j < this.size; j++) {
-        this.workMatrix[i][j] -= min;
-      }
-    }
-    this.addStep(stepNum++, 'Étape 1a - Réduction par lignes', 
-      `Soustraction du minimum de chaque ligne. Minima : [${rowMins.join(', ')}]`,
-      { rowMins: [...rowMins], lowerBound: this.lowerBound });
-
-    // --- Étape 1b : Réduction par colonnes ---
-    const colMins: number[] = [];
+  // Sauvegarder la matrice originale
+  for (let i = 0; i < this.size; i++) {
     for (let j = 0; j < this.size; j++) {
-      let min = this.workMatrix[0][j];
-      for (let i = 1; i < this.size; i++) min = Math.min(min, this.workMatrix[i][j]);
-      colMins.push(min);
-      this.lowerBound += min;
-      for (let i = 0; i < this.size; i++) {
-        this.workMatrix[i][j] -= min;
-      }
+      this.originalMatrix[i][j] = this.matrixData[i][j];
     }
-    this.addStep(stepNum++, 'Étape 1b - Réduction par colonnes',
-      `Soustraction du minimum de chaque colonne. Minima : [${colMins.join(', ')}]`,
-      { colMins: [...colMins], lowerBound: this.lowerBound });
-
-    let iteration = 0;
-    const maxIterations = 10;
-    let found = false;
-    
-    while (iteration < maxIterations && !found) {
-      iteration++;
-      
-      // --- Étape 2 : Détermination d'un couplage optimal unique ---
-      const marked: { r: number; c: number; type: 'framed' | 'crossed' }[] = [];
-      
-      while (true) {
-        let bestRow = -1;
-        let minZerosCount = Infinity;
-        let selectedZeroCol = -1;
-
-        // Règle a : Trouver la ligne avec le moins de zéros libres
-        for (let i = 0; i < this.size; i++) {
-          // Si la ligne a déjà un zéro encadré, on l'ignore
-          if (marked.some(m => m.r === i && m.type === 'framed')) continue;
-
-          let freeZerosOnRow = 0;
-          let firstFreeColOnRow = -1;
-
-          for (let j = 0; j < this.size; j++) {
-            if (Math.abs(this.workMatrix[i][j]) < 1e-9) {
-              // Un zéro est libre s'il n'est ni encadré ni barré globalement ou sur sa colonne
-              const isMarked = marked.some(m => m.r === i && m.c === j);
-              const isColOccupied = marked.some(m => m.c === j && m.type === 'framed');
-              if (!isMarked && !isColOccupied) {
-                freeZerosOnRow++;
-                if (firstFreeColOnRow === -1) firstFreeColOnRow = j;
-              }
-            }
-          }
-
-          if (freeZerosOnRow > 0 && freeZerosOnRow < minZerosCount) {
-            minZerosCount = freeZerosOnRow;
-            bestRow = i;
-            selectedZeroCol = firstFreeColOnRow;
-          }
-        }
-
-        if (bestRow === -1) break;
-
-        // Étape de sélection de ligne
-        this.addStep(stepNum++, `Étape 2 - Sélection Ligne`, 
-          `Choix de la ligne [${this.labels[bestRow]}] (${minZerosCount} zéro(s) libre(s)).`,
-          { marked: [...marked.map(m => ({...m}))] });
-
-        // Règle b : Encadrer le premier zéro libre
-        marked.push({ r: bestRow, c: selectedZeroCol, type: 'framed' });
-        this.addStep(stepNum++, `Étape 2 - Zéro Encadré ⓪`, 
-          `On encadre le zéro en [${this.labels[bestRow]}, ${this.labels[selectedZeroCol]}].`,
-          { marked: [...marked.map(m => ({...m}))] });
-
-        // CRUCIAL : Barrer TOUS les autres zéros sur la même ligne ET même colonne
-        // 1. Sur la même ligne
-        for (let j = 0; j < this.size; j++) {
-          if (j !== selectedZeroCol && Math.abs(this.workMatrix[bestRow][j]) < 1e-9) {
-            if (!marked.some(m => m.r === bestRow && m.c === j)) {
-              marked.push({ r: bestRow, c: j, type: 'crossed' });
-              this.addStep(stepNum++, `Étape 2 - Zéro Barré Ø (Ligne)`, 
-                `Zéro en [${this.labels[bestRow]}, ${this.labels[j]}] barré (ligne occupée).`,
-                { marked: [...marked.map(m => ({...m}))] });
-            }
-          }
-        }
-
-        // 2. Sur la même colonne
-        for (let i = 0; i < this.size; i++) {
-          if (i !== bestRow && Math.abs(this.workMatrix[i][selectedZeroCol]) < 1e-9) {
-            if (!marked.some(m => m.r === i && m.c === selectedZeroCol)) {
-              marked.push({ r: i, c: selectedZeroCol, type: 'crossed' });
-              this.addStep(stepNum++, `Étape 2 - Zéro Barré Ø (Colonne)`, 
-                `Zéro en [${this.labels[i]}, ${this.labels[selectedZeroCol]}] barré (colonne occupée).`,
-                { marked: [...marked.map(m => ({...m}))] });
-            }
-          }
-        }
-      }
-
-      const framedZeros = marked.filter(m => m.type === 'framed');
-      const count = framedZeros.length;
-      
-      this.addStep(stepNum++, `Étape 2 - Bilan du Couplage`,
-        `Nombre de zéros indépendants encadrés : ${count} / ${this.size}.`,
-        { marked: [...marked.map(m => ({...m}))] });
-      
-      if (count === this.size) {
-        this.assignments = framedZeros.map(fz => ({
-          worker: this.labels[fz.r],
-          job: this.labels[fz.c],
-          cost: this.originalMatrix[fz.r][fz.c],
-          row: fz.r,
-          col: fz.c
-        }));
-        this.totalCost = this.assignments.reduce((sum, a) => sum + a.cost, 0);
-        const assignList = this.assignments.map(a => `${a.worker} → ${a.job} (${a.cost})`).join(' ; ');
-        this.addStep(stepNum++, 'Solution optimale - Affectation finale',
-          `Couplage complet : ${this.size} zéros encadrés indépendants trouvés. Affectations : ${assignList}. Coût ${this.isMinimization ? 'minimal' : 'maximal'} total = ${this.totalCost}.`,
-          { marked: [...marked.map(m => ({...m}))], lowerBound: this.lowerBound, isFinal: true });
-        found = true;
-        break;
-      }
-      
-      // --- Étape 3 : Marquage (lignes/colonnes) puis couverture ---
-      const coverResult = this.findMinimumCoverWithSteps(marked, this.size);
-      coverResult.markingSteps.forEach(ms => {
-        this.addStep(stepNum++, 'Étape 3 - Marquage', ms.note,
-          { marked: [...marked.map(m => ({...m}))], markedRows: [...ms.markedRows], markedCols: [...ms.markedCols] });
-      });
-      const cover = { rows: coverResult.rows, cols: coverResult.cols };
-      this.addStep(stepNum++, 'Étape 3 - Lignes de couverture', `Tracé des lignes de couverture minimales.`,
-        { marked: [...marked.map(m => ({...m}))], coveredRows: [...cover.rows], coveredCols: [...cover.cols],
-          markedRows: [...coverResult.markedRows], markedCols: [...coverResult.markedCols] });
-      
-      // --- Étape 4 : Ajustement ---
-      const { minVal, newMatrix } = this.adjustMatrix(cover);
-      if (minVal === Infinity || minVal === 0) break;
-      
-      this.lowerBound += minVal;
-      this.workMatrix = newMatrix;
-      
-      this.addStep(stepNum++, 'Étape 4 - Pivot de la matrice', `Ajustement avec le pivot k = ${minVal}.`,
-        { coveredRows: [...cover.rows], coveredCols: [...cover.cols], minUncovered: minVal, lowerBound: this.lowerBound });
-    }
-    
-    // Calcul du coût total à partir des affectations exactes trouvées
-    this.totalCost = this.assignments.reduce((sum, a) => sum + a.cost, 0);
-    
-    this.currentStep = 0;
-    this.result = { assignments: this.assignments, totalCost: this.totalCost, isOptimal: true };
   }
+  
+  this.reset();
+  
+  let matrix = this.originalMatrix.map(r => [...r]);
+  if (!this.isMinimization) {
+    const maxVal = Math.max(...matrix.flat());
+    matrix = matrix.map(r => r.map(v => maxVal - v));
+  }
+
+  this.workMatrix = matrix.map(r => [...r]);
+  this.steps = [];
+  this.lowerBound = 0;
+  let stepNum = 1;
+
+  // ==========================================
+  // --- Étape 1a : Réduction par lignes (DÉTAILLÉE) ---
+  // ==========================================
+  
+  // Étape 1a.1 : Analyse et recherche des minima
+  const rowMins: number[] = [];
+  for (let i = 0; i < this.size; i++) {
+    rowMins.push(Math.min(...this.workMatrix[i]));
+  }
+
+  this.addStep(
+    stepNum++, 
+    'Étape 1a - Analyse des lignes', 
+    `Recherche du plus petit élément de chaque ligne :\n` + 
+    rowMins.map((min, idx) => `· Ligne ${this.labels[idx]} : minimum = ${min}`).join('\n'),
+    { rowMins: [...rowMins], lowerBound: this.lowerBound, phase: 'etape1a_intro' }
+  );
+
+  // Étape 1a.2 : Soustraction ligne par ligne
+  for (let i = 0; i < this.size; i++) {
+    const min = rowMins[i];
+    this.lowerBound += min;
+    
+    // On soustrait uniquement sur la ligne courante i
+    for (let j = 0; j < this.size; j++) {
+      this.workMatrix[i][j] -= min;
+    }
+
+    // On crée une explication textuelle dynamique de l'opération
+    const operationDetails = this.originalMatrix[i].map(v => `${v} - ${min} = ${v - min}`).join(', ');
+
+    this.addStep(
+      stepNum++, 
+      `Étape 1a - Réduction de la Ligne ${this.labels[i]}`, 
+      `Soustraction du minimum (${min}) à chaque élément de la ligne ${this.labels[i]}.\n` +
+      `Détail des calculs : [${operationDetails}].\n` +
+      `Le minorant global augmente de +${min} (Nouvelle Borne = ${this.lowerBound}).`,
+      { rowMins: [...rowMins], lowerBound: this.lowerBound, phase: 'etape1a_row' }
+    );
+  }
+
+  // ==========================================
+  // --- Étape 1b : Réduction par colonnes (DÉTAILLÉE) ---
+  // ==========================================
+  
+  // Étape 1b.1 : Analyse et recherche des minima sur la matrice fraîchement réduite
+  const colMins: number[] = [];
+  for (let j = 0; j < this.size; j++) {
+    let min = this.workMatrix[0][j];
+    for (let i = 1; i < this.size; i++) {
+      if (this.workMatrix[i][j] < min) min = this.workMatrix[i][j];
+    }
+    colMins.push(min);
+  }
+
+  this.addStep(
+    stepNum++, 
+    'Étape 1b - Analyse des colonnes', 
+    `Recherche du plus petit élément de chaque colonne sur la matrice actuelle :\n` + 
+    colMins.map((min, idx) => `· Colonne ${this.labels[idx]} : minimum = ${min}`).join('\n'),
+    { colMins: [...colMins], lowerBound: this.lowerBound, phase: 'etape1b_intro' }
+  );
+
+  // Étape 1b.2 : Soustraction colonne par colonne
+  for (let j = 0; j < this.size; j++) {
+    const min = colMins[j];
+    this.lowerBound += min;
+
+    // Sauvegarde des valeurs avant soustraction pour l'affichage des calculs
+    const avantSoustraction: number[] = [];
+    for (let i = 0; i < this.size; i++) {
+      avantSoustraction.push(this.workMatrix[i][j]);
+    }
+
+    // Soustraction uniquement sur la colonne courante j
+    for (let i = 0; i < this.size; i++) {
+      this.workMatrix[i][j] -= min;
+    }
+
+    const operationDetails = avantSoustraction.map(v => `${v} - ${min} = ${v - min}`).join(', ');
+
+    this.addStep(
+      stepNum++, 
+      `Étape 1b - Réduction de la Colonne ${this.labels[j]}`, 
+      `Soustraction du minimum (${min}) à chaque élément de la colonne ${this.labels[j]}.\n` +
+      `Détail des calculs : [${operationDetails}].\n` +
+      `Le minorant global augmente de +${min} (Nouvelle Borne = ${this.lowerBound}).`,
+      { colMins: [...colMins], lowerBound: this.lowerBound, phase: 'etape1b_col' }
+    );
+  }
+
+  // ==========================================
+  // --- Suite du traitement (Étaples 2, 3, 4 inchangées) ---
+  // ==========================================
+  let iteration = 0;
+  const maxIterations = 10;
+  let found = false;
+  
+  while (iteration < maxIterations && !found) {
+    iteration++;
+    const marked: { r: number; c: number; type: 'framed' | 'crossed' }[] = [];
+    
+    while (true) {
+      let bestRow = -1;
+      let minZerosCount = Infinity;
+      let selectedZeroCol = -1;
+
+      for (let i = 0; i < this.size; i++) {
+        if (marked.some(m => m.r === i && m.type === 'framed')) continue;
+        let freeZerosOnRow = 0;
+        let firstFreeColOnRow = -1;
+        for (let j = 0; j < this.size; j++) {
+          if (Math.abs(this.workMatrix[i][j]) < 1e-9) {
+            const isMarked = marked.some(m => m.r === i && m.c === j);
+            const isColOccupied = marked.some(m => m.c === j && m.type === 'framed');
+            if (!isMarked && !isColOccupied) {
+              freeZerosOnRow++;
+              if (firstFreeColOnRow === -1) firstFreeColOnRow = j;
+            }
+          }
+        }
+        if (freeZerosOnRow > 0 && freeZerosOnRow < minZerosCount) {
+          minZerosCount = freeZerosOnRow;
+          bestRow = i;
+          selectedZeroCol = firstFreeColOnRow;
+        }
+      }
+
+      if (bestRow === -1) break;
+
+      this.addStep(stepNum++, `Étape 2 - Sélection Ligne`, 
+        `Choix de la ligne [${this.labels[bestRow]}] (${minZerosCount} zéro(s) libre(s)).`,
+        { marked: [...marked.map(m => ({...m}))] });
+
+      marked.push({ r: bestRow, c: selectedZeroCol, type: 'framed' });
+      this.addStep(stepNum++, `Étape 2 - Zéro Encadré ⓪`, 
+        `On encadre le zéro en [${this.labels[bestRow]}, ${this.labels[selectedZeroCol]}].`,
+        { marked: [...marked.map(m => ({...m}))] });
+
+      for (let j = 0; j < this.size; j++) {
+        if (j !== selectedZeroCol && Math.abs(this.workMatrix[bestRow][j]) < 1e-9) {
+          if (!marked.some(m => m.r === bestRow && m.c === j)) {
+            marked.push({ r: bestRow, c: j, type: 'crossed' });
+            this.addStep(stepNum++, `Étape 2 - Zéro Barré Ø (Ligne)`, 
+              `Zéro en [${this.labels[bestRow]}, ${this.labels[j]}] barré (ligne occupée).`,
+              { marked: [...marked.map(m => ({...m}))] });
+          }
+        }
+      }
+
+      for (let i = 0; i < this.size; i++) {
+        if (i !== bestRow && Math.abs(this.workMatrix[i][selectedZeroCol]) < 1e-9) {
+          if (!marked.some(m => m.r === i && m.c === selectedZeroCol)) {
+            marked.push({ r: i, c: selectedZeroCol, type: 'crossed' });
+            this.addStep(stepNum++, `Étape 2 - Zéro Barré Ø (Colonne)`, 
+              `Zéro en [${this.labels[i]}, ${this.labels[selectedZeroCol]}] barré (colonne occupée).`,
+              { marked: [...marked.map(m => ({...m}))] });
+          }
+        }
+      }
+    }
+
+    const framedZeros = marked.filter(m => m.type === 'framed');
+    const count = framedZeros.length;
+    
+    this.addStep(stepNum++, `Étape 2 - Bilan du Couplage`,
+      `Nombre de zéros indépendants encadrés : ${count} / ${this.size}.`,
+      { marked: [...marked.map(m => ({...m}))] });
+    
+    if (count === this.size) {
+      this.assignments = framedZeros.map(fz => ({
+        worker: this.labels[fz.r],
+        job: this.labels[fz.c],
+        cost: this.originalMatrix[fz.r][fz.c],
+        row: fz.r,
+        col: fz.c
+      }));
+      this.totalCost = this.assignments.reduce((sum, a) => sum + a.cost, 0);
+      const assignList = this.assignments.map(a => `${a.worker} → ${a.job} (${a.cost})`).join(' ; ');
+      this.addStep(stepNum++, 'Solution optimale - Affectation finale',
+        `Couplage complet : ${this.size} zéros encadrés indépendants trouvés. Affectations : ${assignList}. Coût ${this.isMinimization ? 'minimal' : 'maximal'} total = ${this.totalCost}.`,
+        { marked: [...marked.map(m => ({...m}))], lowerBound: this.lowerBound, isFinal: true });
+      found = true;
+      break;
+    }
+    
+    const coverResult = this.findMinimumCoverWithSteps(marked, this.size);
+    coverResult.markingSteps.forEach(ms => {
+      this.addStep(stepNum++, 'Étape 3 - Marquage', ms.note,
+        { marked: [...marked.map(m => ({...m}))], markedRows: [...ms.markedRows], markedCols: [...ms.markedCols] });
+    });
+    const cover = { rows: coverResult.rows, cols: coverResult.cols };
+    this.addStep(stepNum++, 'Étape 3 - Lignes de couverture', `Tracé des lignes de couverture minimales.`,
+      { marked: [...marked.map(m => ({...m}))], coveredRows: [...cover.rows], coveredCols: [...cover.cols],
+        markedRows: [...coverResult.markedRows], markedCols: [...coverResult.markedCols] });
+    
+    const { minVal, newMatrix } = this.adjustMatrix(cover);
+    if (minVal === Infinity || minVal === 0) break;
+    
+    this.lowerBound += minVal;
+    this.workMatrix = newMatrix;
+    
+    this.addStep(stepNum++, 'Étape 4 - Pivot de la matrice', `Ajustement avec le pivot k = ${minVal}.`,
+      { coveredRows: [...cover.rows], coveredCols: [...cover.cols], minUncovered: minVal, lowerBound: this.lowerBound });
+  }
+  
+  this.totalCost = this.assignments.reduce((sum, a) => sum + a.cost, 0);
+  this.currentStep = 0;
+  this.result = { assignments: this.assignments, totalCost: this.totalCost, isOptimal: true };
+}
 
   addStep(stepNum: number, title: string, description: string, extra: any = {}) {
     this.steps.push({
@@ -783,7 +831,7 @@ generatePowerPoint() {
       }
     });
  
-    pptx.writeFile({ fileName: 'algorithme_complet.pptx' });
+    pptx.writeFile({ fileName: 'algorithme_minimisation.pptx' });
   }
 
 generatePDF() {

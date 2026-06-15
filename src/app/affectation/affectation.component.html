@@ -80,6 +80,7 @@
       <span *ngIf="steps[currentStep].isFinal" class="badge">Solution optimale</span>
     </h2>
     <p class="desc">{{ steps[currentStep].description }}</p>
+    <p class="desc" style="white-space: pre-line;">{{ steps[currentStep].description }}</p>
 
     <div class="matrix-container">
       <div class="matrix-grid" [style.grid-template-columns]="'80px repeat(' + size + ', 90px)'">
@@ -112,8 +113,14 @@
       <div *ngIf="steps[currentStep].rowMins" class="detail">
         <strong>Minimal par ligne :</strong> [{{ steps[currentStep].rowMins?.join(', ') }}]
       </div>
+      <div *ngIf="steps[currentStep].rowZeroCounts" class="detail">
+        <strong>Zéros par ligne :</strong> [{{ steps[currentStep].rowZeroCounts?.join(', ') }}]
+      </div>
       <div *ngIf="steps[currentStep].colMins" class="detail">
         <strong>Minimal par colonne :</strong> [{{ steps[currentStep].colMins?.join(', ') }}]
+      </div>
+      <div *ngIf="steps[currentStep].colZeroCounts" class="detail">
+        <strong>Zéros par colonne :</strong> [{{ steps[currentStep].colZeroCounts?.join(', ') }}]
       </div>
       <div *ngIf="steps[currentStep].minUncovered !== undefined" class="detail">
         <strong>Minimum non-couvert :</strong> {{ steps[currentStep].minUncovered }}
