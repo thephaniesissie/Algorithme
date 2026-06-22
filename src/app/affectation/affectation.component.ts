@@ -373,14 +373,13 @@ export class AffectationComponent {
       { marked: [...marked.map(m => ({...m}))], coveredRows: [...cover.rows], coveredCols: [...cover.cols],
         markedRows: [...coverResult.markedRows], markedCols: [...coverResult.markedCols] });
     
-    const { minVal, newMatrix } = this.adjustMatrix(cover);
+    const adjustResult = this.adjustMatrix(cover, stepNum);
+    const { minVal, newMatrix } = adjustResult;
+    stepNum = adjustResult.stepNum;
     if (minVal === Infinity || minVal === 0) break;
     
     this.lowerBound += minVal;
     this.workMatrix = newMatrix;
-    
-    this.addStep(stepNum++, 'Étape 4 - Pivot de la matrice', `Ajustement avec le pivot k = ${minVal}.`,
-      { coveredRows: [...cover.rows], coveredCols: [...cover.cols], minUncovered: minVal, lowerBound: this.lowerBound });
   }
   
   this.totalCost = this.assignments.reduce((sum, a) => sum + a.cost, 0);
@@ -402,6 +401,8 @@ export class AffectationComponent {
       markedRows: extra.markedRows,
       markedCols: extra.markedCols,
       minUncovered: extra.minUncovered,
+      pivot: extra.pivot,
+      activeCell: extra.activeCell,
       lowerBound: extra.lowerBound,
       isFinal: extra.isFinal || false
     } as any);
@@ -541,31 +542,64 @@ export class AffectationComponent {
     return { rows, cols, markingSteps, markedRows, markedCols };
   }
 
-  adjustMatrix(cover: { rows: boolean[]; cols: boolean[] }) {
+  adjustMatrix(cover: { rows: boolean[]; cols: boolean[] }, stepNum: number) {
     let minVal = Infinity;
     const n = this.size;
+    const pivot = { r: -1, c: -1 };
 
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
         if (!cover.rows[i] && !cover.cols[j]) {
-          minVal = Math.min(minVal, this.workMatrix[i][j]);
+          const value = this.workMatrix[i][j];
+          if (value < minVal) {
+            minVal = value;
+            pivot.r = i;
+            pivot.c = j;
+          }
         }
       }
     }
-    if (minVal === Infinity || minVal === 0) return { minVal: 0, newMatrix: this.workMatrix.map(r => [...r]) };
+
+    if (minVal === Infinity || minVal === 0) {
+      return { minVal: 0, newMatrix: this.workMatrix.map(r => [...r]), stepNum };
+    }
+
+    this.addStep(
+      stepNum++,
+      'Étape 4 - Pivot repéré',
+      `Le plus petit élément non rayé est repéré comme pivot et coloré en rouge : [${this.labels[pivot.r]}, ${this.labels[pivot.c]}] = ${minVal}.
+Cette case sera utilisée pour les opérations suivantes de soustraction et d'ajout.`,
+      { coveredRows: [...cover.rows], coveredCols: [...cover.cols], pivot, minUncovered: minVal, lowerBound: this.lowerBound }
+    );
 
     const newMatrix = this.workMatrix.map(r => [...r]);
+
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
+        const originalValue = newMatrix[i][j];
         if (!cover.rows[i] && !cover.cols[j]) {
-          newMatrix[i][j] -= minVal;
+          newMatrix[i][j] = originalValue - minVal;
+          this.workMatrix = newMatrix.map(r => [...r]);
+          this.addStep(
+            stepNum++,
+            'Étape 4 - Soustraction non rayée',
+            `Soustraction du minimum (${minVal}) à la case non rayée [${this.labels[i]}, ${this.labels[j]}] : ${originalValue} - ${minVal} = ${newMatrix[i][j]}.`,
+            { coveredRows: [...cover.rows], coveredCols: [...cover.cols], pivot, activeCell: { r: i, c: j }, minUncovered: minVal, lowerBound: this.lowerBound }
+          );
         } else if (cover.rows[i] && cover.cols[j]) {
-          newMatrix[i][j] += minVal;
+          newMatrix[i][j] = originalValue + minVal;
+          this.workMatrix = newMatrix.map(r => [...r]);
+          this.addStep(
+            stepNum++,
+            'Étape 4 - Ajout doublement rayé',
+            `Ajout du minimum (${minVal}) à la case rayée deux fois [${this.labels[i]}, ${this.labels[j]}] : ${originalValue} + ${minVal} = ${newMatrix[i][j]}.`,
+            { coveredRows: [...cover.rows], coveredCols: [...cover.cols], pivot, activeCell: { r: i, c: j }, minUncovered: minVal, lowerBound: this.lowerBound }
+          );
         }
       }
     }
 
-    return { minVal, newMatrix };
+    return { minVal, newMatrix, stepNum };
   }
 
   extractAssignments(matrix: number[][]) {
@@ -646,6 +680,22 @@ export class AffectationComponent {
     return (step as any).markedCols?.[c] || false;
   }
 
+  isPivotCell(r: number, c: number, step: MatrixStep) {
+    return step.pivot?.r === r && step.pivot?.c === c && step.matrix?.[r]?.[c] !== 0;
+  }
+
+  isActiveCell(r: number, c: number, step: MatrixStep) {
+    return step.activeCell?.r === r && step.activeCell?.c === c;
+  }
+
+  isCoveredTwice(r: number, c: number, step: MatrixStep) {
+    return !!(step.coveredRows?.[r] && step.coveredCols?.[c]);
+  }
+
+  isCoveredOnce(r: number, c: number, step: MatrixStep) {
+    return !!((step.coveredRows?.[r] || step.coveredCols?.[c]) && !(step.coveredRows?.[r] && step.coveredCols?.[c]));
+  }
+
   getMarkedRows(step: MatrixStep): string[] {
     return (step as any).markedRows?.map((v: boolean, i: number) => v ? this.labels[i] : '').filter(Boolean) || [];
   }
@@ -699,18 +749,34 @@ generatePowerPoint() {
         for (let j = 0; j < n; j++) {
           const val = matrix[i][j];
           let opts: any = { align: 'center', fontFace: 'Courier New', color: '000000', fill: { color: 'FFFFFF' } };
-          if (val === 0) { opts.color = BRAND_RED; opts.bold = true; }
-          if (this.isFramed(i, j, step)) {
+          if (this.isPivotCell(i, j, step)) {
+            opts.fill = { color: 'D32F2F' };
+            opts.color = 'FFFFFF';
+            opts.bold = true;
+          } else if (this.isActiveCell(i, j, step)) {
+            opts.fill = { color: 'FFF59D' };
+            opts.color = '000000';
+            opts.bold = true;
+          } else if (this.isFramed(i, j, step)) {
             opts.fill = { color: 'C8F0C8' };
             opts.border = [
               { pt: 3, color: '2E7D32' }, { pt: 3, color: '2E7D32' },
               { pt: 3, color: '2E7D32' }, { pt: 3, color: '2E7D32' }
             ];
             opts.color = '1B5E20'; opts.bold = true;
+          } else if (this.isCoveredTwice(i, j, step)) {
+            opts.fill = { color: 'CE93D8' };
+            opts.color = '4A148C';
+            opts.bold = true;
+          } else if (this.isCoveredOnce(i, j, step)) {
+            opts.fill = { color: 'FFEBEE' };
+          } else if (val === 0) {
+            opts.color = BRAND_RED;
+            opts.bold = true;
           }
           if (this.isCrossed(i, j, step)) { opts.color = '999999'; opts.strike = true; }
-          if (this.isRowCovered(i, step)) opts.fill = { color: 'FFF3E0' };
-          else if (this.isColCovered(j, step)) opts.fill = { color: 'FFEBEE' };
+          if (this.isRowCovered(i, step) && !this.isCoveredTwice(i, j, step) && !this.isPivotCell(i, j, step) && !this.isActiveCell(i, j, step)) opts.fill = { color: 'FFF3E0' };
+          else if (this.isColCovered(j, step) && !this.isCoveredTwice(i, j, step) && !this.isPivotCell(i, j, step) && !this.isActiveCell(i, j, step)) opts.fill = { color: 'FFEBEE' };
           row.push({ text: val.toString(), options: opts });
         }
         rows.push(row);
@@ -892,28 +958,32 @@ generatePDF() {
           const colIndex = data.column.index - 1; // Ajustement à cause de la colonne Worker
           const val = step.matrix[rowIndex][colIndex];
 
-          // 1. Zéro d'affectation potentiel
-          if (val === 0) {
+          if (this.isPivotCell(rowIndex, colIndex, step)) {
+            data.cell.styles.fillColor = [211, 47, 47]; // #d32f2f
+            data.cell.styles.textColor = [255, 255, 255];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (this.isActiveCell(rowIndex, colIndex, step)) {
+            data.cell.styles.fillColor = [255, 245, 157]; // #fff59d
+            data.cell.styles.textColor = [0, 0, 0];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (this.isFramed(rowIndex, colIndex, step)) {
+            data.cell.styles.fillColor = [200, 230, 201]; // #c8e6c9
+            data.cell.styles.lineWidth = 1;
+            data.cell.styles.lineColor = [76, 175, 80];   // #4caf50
+            data.cell.styles.textColor = [27, 94, 32];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (this.isCoveredTwice(rowIndex, colIndex, step)) {
+            data.cell.styles.fillColor = [206, 147, 216]; // #ce93d8
+            data.cell.styles.textColor = [74, 20, 140];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (this.isCoveredOnce(rowIndex, colIndex, step)) {
+            data.cell.styles.fillColor = [255, 235, 235]; // #ffebee
+          } else if (val === 0) {
             data.cell.styles.fillColor = [232, 245, 233]; // #e8f5e9 (Vert clair)
             data.cell.styles.textColor = [46, 125, 50];   // #2e7d32
             data.cell.styles.fontStyle = 'bold';
           }
-          
-          // 2. Cellule Encadrée (Framed)
-          if (this.isFramed(rowIndex, colIndex, step)) {
-            data.cell.styles.fillColor = [200, 230, 201]; // #c8e6c9
-            data.cell.styles.lineWidth = 1;
-            data.cell.styles.lineColor = [76, 175, 80];   // #4caf50
-          }
-          
-          // 3. Lignes / Colonnes Couvertes (Rayées)
-          if (this.isRowCovered(rowIndex, step)) {
-            data.cell.styles.fillColor = [255, 243, 224]; // #fff3e0 (Orange clair)
-          } else if (this.isColCovered(colIndex, step)) {
-            data.cell.styles.fillColor = [255, 235, 235]; // #ffebee (Rouge clair)
-          }
 
-          // 4. Cellule Barrée (Crossed)
           if (this.isCrossed(rowIndex, colIndex, step)) {
             data.cell.styles.textColor = [158, 158, 158]; // #9e9e9e
           }

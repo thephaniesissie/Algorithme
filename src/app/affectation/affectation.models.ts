@@ -11,6 +11,8 @@ export interface MatrixStep {
   coveredRows?: boolean[];
   coveredCols?: boolean[];
   minUncovered?: number;
+  pivot?: { r: number; c: number };
+  activeCell?: { r: number; c: number };
   lowerBound?: number;
   isFinal: boolean;
 }

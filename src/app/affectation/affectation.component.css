@@ -170,6 +170,30 @@ h2 {
   background: #ffebee;
 }
 
+.cell.value.covered-twice {
+  background: #ce93d8;
+  color: #4a148c;
+}
+
+.cell.value.covered-once {
+  background: #ffebee;
+}
+
+.cell.value.pivot {
+  background: #d32f2f;
+  color: white;
+  font-weight: 800;
+  border: 2px solid #b71c1c;
+  box-shadow: 0 0 10px rgba(211, 47, 47, 0.35);
+}
+
+.cell.value.active {
+  background: #fff59d;
+  color: #000;
+  border: 2px solid #fdd835;
+  box-shadow: 0 0 6px rgba(255, 246, 157, 0.7);
+}
+
 .marker {
   position: absolute;
   font-size: 18px;

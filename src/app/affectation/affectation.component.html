@@ -97,11 +97,13 @@
           </div>
           <ng-container *ngFor="let val of row; let j = index">
             <div class="cell value" 
+                 [class.pivot]="isPivotCell(i, j, steps[currentStep])" 
+                 [class.active]="isActiveCell(i, j, steps[currentStep])"
+                 [class.covered-twice]="isCoveredTwice(i, j, steps[currentStep])"
+                 [class.covered-once]="isCoveredOnce(i, j, steps[currentStep])"
                  [class.zero]="val === 0" 
                  [class.framed]="isFramed(i, j, steps[currentStep])" 
-                 [class.crossed]="isCrossed(i, j, steps[currentStep])" 
-                 [class.covered-row]="isRowCovered(i, steps[currentStep])"
-                 [class.covered-col]="isColCovered(j, steps[currentStep])">
+                 [class.crossed]="isCrossed(i, j, steps[currentStep])">
               {{ val }}
             </div>
           </ng-container>
@@ -124,6 +126,9 @@
       </div>
       <div *ngIf="steps[currentStep].minUncovered !== undefined" class="detail">
         <strong>Minimum non-couvert :</strong> {{ steps[currentStep].minUncovered }}
+      </div>
+      <div *ngIf="steps[currentStep].pivot" class="detail">
+        <strong>Pivot :</strong> {{ labels[steps[currentStep].pivot!.r] }} - {{ labels[steps[currentStep].pivot!.c] }}
       </div>
       <div *ngIf="steps[currentStep].lowerBound !== undefined" class="detail highlight">
         <strong>Minorant (borne inférieure) :</strong> {{ steps[currentStep].lowerBound }}
