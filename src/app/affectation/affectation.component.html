@@ -17,7 +17,7 @@
       </div>
       <div class="config-item">
         <label>Type d'optimisation :</label>
-        <select [(ngModel)]="isMinimization" class="type-select">
+        <select [ngModel]="isMinimization" (ngModelChange)="isMinimization = $event === 'true' || $event === true" class="type-select">
           <option [value]="true">Minimisation (coûts)</option>
           <option [value]="false">Maximisation (profits)</option>
         </select>
@@ -78,6 +78,8 @@
     <h2>
       {{ steps[currentStep].title }} 
       <span *ngIf="steps[currentStep].isFinal" class="badge">Solution optimale</span>
+      <span *ngIf="$any(steps[currentStep]).phase === 'maximisation_original' || $any(steps[currentStep]).phase === 'maximisation_complement'" 
+      class="badge" style="background: #ff9800;">Affectation de valeur maximale</span>
     </h2>
     <p class="desc">{{ steps[currentStep].description }}</p>
     <p class="desc" style="white-space: pre-line;">{{ steps[currentStep].description }}</p>
@@ -112,6 +114,10 @@
     </div>
 
     <div class="step-details">
+      <div *ngIf="$any(steps[currentStep]).complementM !== undefined" class="detail highlight" style="color: #e65100; border-left-color: #ff9800;">
+        <strong>Complément à M = {{ $any(steps[currentStep]).complementM }} :</strong> 
+        Chaque valeur v est remplacée par {{ $any(steps[currentStep]).complementM }} - v
+      </div>
       <div *ngIf="steps[currentStep].rowMins" class="detail">
         <strong>Minimal par ligne :</strong> [{{ steps[currentStep].rowMins?.join(', ') }}]
       </div>
@@ -175,6 +181,44 @@
       </div>
       <div class="optimal-badge" *ngIf="result.isOptimal">
         Solution optimale trouvée !
+      </div>
+    </div>
+  </section>
+
+  <section *ngIf="result && isMinimization" class="card result-card" style="background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%); border-left: 4px solid #ff9800;">
+    <h2>Affectation de valeur maximale dans la minimisation</h2>
+    <p class="hint">Voici l'analyse de la valeur maximale à partir de la matrice initiale, avec la conversion de chaque affectation pour obtenir le profit correspondant.</p>
+    
+    <div class="result-content">
+      <div class="matrix-container" style="margin-top: 10px;">
+        <div class="matrix-grid" [style.grid-template-columns]="'80px repeat(' + size + ', 90px)'">
+          <div class="cell header empty"></div>
+          <div *ngFor="let job of labels; let j = index" class="cell header job">{{ job }}</div>
+          <ng-container *ngFor="let row of originalMatrix; let i = index; trackBy: trackByRow">
+            <div class="cell header worker">{{ labels[i] }}</div>
+            <div *ngFor="let val of row; let j = index; trackBy: trackByCol" class="cell value" [class.active]="i === 0 && j === 0">
+              {{ 100 - val }}
+            </div>
+          </ng-container>
+        </div>
+      </div>
+      <div class="result-assignments">
+        <h3>Complément à 100 des affectations :</h3>
+        <div class="assignment-list">
+          <div *ngFor="let assignment of result.assignments" class="assignment-item">
+            <span class="worker">{{ assignment.worker }}</span> 
+            <span class="arrow">→</span>
+            <span class="job">{{ assignment.job }}</span> 
+            <span class="cost" style="color: #e65100; font-weight: bold;">
+              (Valeur max : {{ 100 - assignment.cost }})
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="result-cost" style="margin-top: 20px;">
+        <strong>Profit maximal total (Complément à 100) :</strong> 
+        <span class="cost-value" style="color: #e65100;">{{ getMaxTotalProfit() }}</span>
       </div>
     </div>
   </section>

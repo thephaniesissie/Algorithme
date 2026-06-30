@@ -114,16 +114,43 @@ export class AffectationComponent {
     this.size = 6;
     this.labels = ['A', 'B', 'C', 'D', 'E', 'F'];
     this.matrixData = [
-      [14, 6, 18, 16, 63, 15],
-      [41, 78, 44, 73, 70, 25],
-      [44, 81, 36, 80, 80, 78],
-      [46, 74, 5, 25, 83, 3],
-      [72, 32, 55, 51, 3, 81],
-      [69, 76, 12, 99, 83, 80]
+      [86, 94, 82, 84, 37, 85],
+      [59, 22, 56, 27, 30, 75],
+      [56, 19, 64, 20, 20, 22],
+      [54, 26, 95, 75, 17, 97],
+      [28, 68, 45, 49, 97, 19],
+      [31, 24, 88,  1, 17, 20]
     ];
     this.originalMatrix = this.matrixData.map(r => [...r]);
-    this.isMinimization = true;
+    this.isMinimization = false;
     this.reset();
+  }
+
+  /**
+   * Calcule le profit maximal total basé sur le complément à 100
+   * pour l'étape spécifique d'affectation de valeur maximale.
+   */
+  getMaxTotalProfit(): number {
+    if (!this.result || !this.result.assignments) return 0;
+    return this.result.assignments.reduce((sum, assignment) => sum + (100 - assignment.cost), 0);
+  }
+
+  private findMatrixMaximum(matrix: number[][]): { value: number; row: number; col: number } {
+    let maxValue = -Infinity;
+    let maxRow = 0;
+    let maxCol = 0;
+
+    for (let i = 0; i < matrix.length; i++) {
+      for (let j = 0; j < matrix[i].length; j++) {
+        if (matrix[i][j] > maxValue) {
+          maxValue = matrix[i][j];
+          maxRow = i;
+          maxCol = j;
+        }
+      }
+    }
+
+    return { value: maxValue, row: maxRow, col: maxCol };
   }
 
   validateMatrix(): boolean {
@@ -167,15 +194,56 @@ export class AffectationComponent {
   this.reset();
   
   let matrix = this.originalMatrix.map(r => [...r]);
-  if (!this.isMinimization) {
-    const maxVal = Math.max(...matrix.flat());
-    matrix = matrix.map(r => r.map(v => maxVal - v));
-  }
-
+  
   this.workMatrix = matrix.map(r => [...r]);
   this.steps = [];
   this.lowerBound = 0;
   let stepNum = 1;
+
+  // ==========================================
+  // --- Étape 0 : Analyse préalable pour l'affectation de valeur maximale ---
+  // ==========================================
+  if (this.isMinimization) {
+    const maxInfo = this.findMatrixMaximum(matrix);
+    this.addStep(
+      stepNum++,
+      'Étape 0 - Valeur maximale de la matrice',
+      `Analyse préalable pour la section d'affectation de valeur maximale : la valeur la plus grande de la matrice est ${maxInfo.value} en [${this.labels[maxInfo.row]}, ${this.labels[maxInfo.col]}].`,
+      { phase: 'maximisation_intro', activeCell: { r: maxInfo.row, c: maxInfo.col }, maxValue: maxInfo.value }
+    );
+  }
+
+  if (!this.isMinimization) {
+    // Afficher la matrice originale (profits/aptitudes)
+    this.addStep(
+      stepNum++,
+      'Étape 0 - Matrice des profits (valeur maximale)',
+      `Problème d'affectation de valeur maximale.\n` +
+      `La matrice saisie représente des profits/aptitudes à maximiser.\n` +
+      `Méthode : on calcule le complément à M (valeur maximale de la matrice) pour se ramener à un problème de minimisation.`,
+      { phase: 'maximisation_original' }
+    );
+
+    const maxVal = Math.max(...matrix.flat());
+    const M = maxVal <= 100 ? Math.ceil(maxVal / 10) * 10 : maxVal;
+
+    // Show complement computation cell by cell
+    const complementMatrix = matrix.map(r => r.map(v => M - v));
+
+    this.workMatrix = complementMatrix.map(r => [...r]);
+
+    // Step showing the complement matrix
+    this.addStep(
+      stepNum++,
+      `Étape 0 - Matrice des coûts (complément à ${M})`,
+      `Chaque valeur est remplacée par (${M} - valeur d'origine).\n` +
+      `Exemple : si la valeur originale est v, la nouvelle valeur est ${M} - v.\n` +
+      `On obtient ainsi une matrice de coûts à minimiser, équivalente au problème de maximisation initial.`,
+      { phase: 'maximisation_complement', complementM: M }
+    );
+
+    matrix = complementMatrix;
+  }
 
   // ==========================================
   // --- Étape 1a : Réduction par lignes (DÉTAILLÉE) ---
@@ -404,7 +472,10 @@ export class AffectationComponent {
       pivot: extra.pivot,
       activeCell: extra.activeCell,
       lowerBound: extra.lowerBound,
-      isFinal: extra.isFinal || false
+      isFinal: extra.isFinal || false,
+      phase: extra.phase,
+      complementM: extra.complementM,
+      originalMatrixSnapshot: extra.originalMatrixSnapshot
     } as any);
   }
 
